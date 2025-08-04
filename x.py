@@ -28,21 +28,27 @@ def get_next_state_and_reward(state, action):
 
     return new_pos, reward
 
+def random_argmax(actions, q):
+    best_val = max(q[a] for a in actions)
+    best = [a for a in actions if q[a] == best_val]
+    return np.random.choice(best)
+
+def get_available_actions(state):
+    r, c = state
+    acts = []
+    if r > 0: acts.append("up")
+    if r < ROWS-1: acts.append("down")
+    if c > 0: acts.append("left")
+    if c < COLS-1: acts.append("right")
+    return acts
+
 def get_next_action(state, action_values, epsilon=0.1):
-    available_actions = []
-    if state[0] > 0:
-        available_actions.append("up")
-    if state[0] < ROWS - 1:
-        available_actions.append("down")
-    if state[1] > 0:
-        available_actions.append("left")
-    if state[1] < COLS - 1:
-        available_actions.append("right")
+    available_actions = get_available_actions(state)
 
     if np.random.random() < epsilon:
         return np.random.choice(available_actions)
     else:
-        return max(available_actions, key=lambda action: action_values[state[0]][state[1]][action])
+        return random_argmax(available_actions, action_values[state[0]][state[1]])
 
 
 INITIAL_STATE_ACTION_VALUES = [[{
@@ -51,7 +57,6 @@ INITIAL_STATE_ACTION_VALUES = [[{
     "up": 0,
     "down": 0
 } for _ in range(COLS)] for _ in range(ROWS)]
-
 import copy
 
 def train_sarsa(
@@ -116,10 +121,11 @@ def train_q_learning(
     return state_action_values, step_episodes, episode_rewards
 
 def get_max_action_value(state, state_action_values):
+    available_actions = get_available_actions(state)
     if state == T_STATE:
         return 0
     else:
-        values = [value for key, value in state_action_values[state[0]][state[1]].items()]
+        values = [state_action_values[state[0]][state[1]][a] for a in available_actions]
         return max(values)
 
 def get_epsilon(episode, initial_eps=.1, final_eps=0.001, decay_steps=150):
@@ -181,12 +187,10 @@ plot_episode(sarsa_state_action_values, epsilon=0.00001)
 q_state_action_values, q_step_episodes, q_episode_rewards = train_q_learning(
     INITIAL_STATE_ACTION_VALUES,
     alpha=0.5,
-    epsilon=0.01,
-    episodes=5000,
-    max_steps=1000
+    epsilon=0.1,
+    episodes=500
 )
 plot_episode(q_state_action_values, epsilon=0.00001)
-
 
 plt.plot(sarsa_episode_rewards, color='lightblue', label='SARSA', linewidth=2)
 plt.plot(q_episode_rewards, color='red', label='Q-Learning', linewidth=2)
