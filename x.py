@@ -1,205 +1,169 @@
-import numpy as np
-import matplotlib.pyplot as plt
+import random
 
-ROWS = 4
-COLS = 12
-T_STATE = (3, 11)
+state_list = ['left_terminal'] + list(range(1, 20)) + ['right_terminal']
+terminal_states = ['left_terminal', 'right_terminal']
 
-def get_next_state_and_reward(state, action):
-    row, col = state
-    if action == "left":
-        new_pos = (row, col - 1)
-    elif action == "right":
-        new_pos = (row, col + 1)
-    elif action == "up":
-        new_pos = (row - 1, col)
-    elif action == "down":
-        new_pos = (row + 1, col)
+TRUE_STATE_VALUES = {
+    'left_terminal': 0,
+    'right_terminal': 0,
+    1: -9/10,
+    2: -8/10,
+    3: -7/10,
+    4: -6/10,
+    5: -5/10,
+    6: -4/10,
+    7: -3/10,
+    8: -2/10,
+    9: -1/10,
+    10: 0,
+    11: 1/10,
+    12: 2/10,
+    13: 3/10,
+    14: 4/10,
+    15: 5/10,
+    16: 6/10,
+    17: 7/10,
+    18: 8/10,
+    19: 9/10,
+    'right_terminal': 0,
+}
+
+INITIAL_STATE = 10
+
+def get_next_state(state, action):
+    if action == 'left':
+        return state_list[state - 1]
+    else:
+        return state_list[state + 1]
+
+def get_action():
+    if random.random() < 0.5:
+        return 'right'
+    else:
+        return 'left'
     
-    new_pos = (max(0, min(ROWS - 1, new_pos[0])), max(0, min(COLS - 1, new_pos[1])))
-
-    if new_pos == T_STATE:
-        reward = -1 # not sure if this is correct
-    elif new_pos[0] == 3 and new_pos[1] >= 1 and new_pos[1] <= 10:
-        reward = -100
-        new_pos = (3, 0)
+def get_reward(state, action):
+    if state == 19 and action == 'right':
+        return 1
+    elif state == 1 and action == 'left':
+        return -1
     else:
-        reward = -1
-
-    return new_pos, reward
-
-def random_argmax(actions, q):
-    best_val = max(q[a] for a in actions)
-    best = [a for a in actions if q[a] == best_val]
-    return np.random.choice(best)
-
-def get_available_actions(state):
-    r, c = state
-    acts = []
-    if r > 0: acts.append("up")
-    if r < ROWS-1: acts.append("down")
-    if c > 0: acts.append("left")
-    if c < COLS-1: acts.append("right")
-    return acts
-
-def get_next_action(state, action_values, epsilon=0.1):
-    available_actions = get_available_actions(state)
-
-    if np.random.random() < epsilon:
-        return np.random.choice(available_actions)
-    else:
-        return random_argmax(available_actions, action_values[state[0]][state[1]])
-
-
-INITIAL_STATE_ACTION_VALUES = [[{
-    "left": 0,
-    "right": 0,
-    "up": 0,
-    "down": 0
-} for _ in range(COLS)] for _ in range(ROWS)]
-import copy
-
-def train_sarsa(
-    initial_state_action_values,
-    alpha=0.5,
-    epsilon=0.1,
-    episodes=500,
-    decay_steps=None
-):
-    state_action_values = copy.deepcopy(initial_state_action_values)
-    step_episodes = []
-    episode_rewards = []  # Track sum of rewards per episode
-    for i in range(episodes):
-        state = (3, 0)
-        action = get_next_action(state, state_action_values, get_epsilon(i, initial_eps=epsilon, final_eps=0.001, decay_steps=150) if decay_steps else epsilon)
-        current_episode_reward = 0  # Sum of rewards for this episode
-        while state != T_STATE:
-            next_state, reward = get_next_state_and_reward(state, action)
-
-            step_episodes.append(i)
-            current_episode_reward += reward 
-
-            next_action = get_next_action(next_state, state_action_values, get_epsilon(i, initial_eps=epsilon, final_eps=0.001, decay_steps=150) if decay_steps else epsilon)
-            state_action_values[state[0]][state[1]][action] += alpha * (reward + state_action_values[next_state[0]][next_state[1]][next_action] - state_action_values[state[0]][state[1]][action])
-            state = next_state
-            action = next_action
-        
-        episode_rewards.append(current_episode_reward)
-
-    return state_action_values, step_episodes, episode_rewards
-
-def train_q_learning(
-    initial_state_action_values,
-    alpha=0.5,
-    epsilon=0.1,
-    episodes=500,
-    decay_steps=None,
-    max_steps=float('inf')
-):
-    state_action_values = copy.deepcopy(initial_state_action_values)
-    step_episodes = []
-    episode_rewards = []  # Track sum of rewards per episode
-    for i in range(episodes):
-        state = (3, 0)
-        current_episode_reward = 0  # Sum of rewards for this episode
-        step = 0
-        while state != T_STATE and step < max_steps:
-            step += 1
-            
-            action = get_next_action(state, state_action_values, get_epsilon(i, initial_eps=epsilon, final_eps=0.001, decay_steps=150) if decay_steps else epsilon)
-            next_state, r = get_next_state_and_reward(state, action)
-
-            step_episodes.append(i)
-            current_episode_reward += r  # Accumulate episode reward
-
-            max_action_value = get_max_action_value(next_state, state_action_values)
-            state_action_values[state[0]][state[1]][action] += alpha * (r + max_action_value - state_action_values[state[0]][state[1]][action])
-            state = next_state
-        
-        episode_rewards.append(current_episode_reward)  # Store episode total
-
-    return state_action_values, step_episodes, episode_rewards
-
-def get_max_action_value(state, state_action_values):
-    available_actions = get_available_actions(state)
-    if state == T_STATE:
         return 0
-    else:
-        values = [state_action_values[state[0]][state[1]][a] for a in available_actions]
-        return max(values)
 
-def get_epsilon(episode, initial_eps=.1, final_eps=0.001, decay_steps=150):
-    if episode >= decay_steps:
-        return final_eps
-    return initial_eps - (initial_eps - final_eps) * (episode / decay_steps)
-
-def generate_episode(state_action_values, epsilon=0.1):
-    state = (3, 0)
-    episode = [state]
-    while state != T_STATE:
-        action = get_next_action(state, state_action_values, epsilon)
-        state, reward = get_next_state_and_reward(state, action)
-        episode.append(state)
-    
+def generate_episode():
+    episode = []
+    state = INITIAL_STATE
+    while state not in terminal_states:
+        action = get_action()
+        next_state = get_next_state(state, action)
+        reward = get_reward(state, action)
+        episode.append((state, reward))
+        state = next_state
     return episode
 
-def plot_episode(state_action_values, epsilon=0.1):
-    episode_path = generate_episode(state_action_values, epsilon)
-    print(len(episode_path))
+episode = generate_episode()
+print(len(episode))
 
-    cols = [pos[1] for pos in episode_path]
-    rows = [pos[0] for pos in episode_path]
+import numpy as np
 
-    # Simple plot with dots
-    plt.figure(figsize=(7, 3))
-    plt.plot(cols, rows, 'o-', markersize=8, linewidth=2, label='Episode path')
+def calculate_rms_error(state_values, true_state_values):
+    rms_error = 0
+    # Only calculate RMS over non-terminal states (1-19)
+    non_terminal_states = [i for i in range(1, 20)]
+    for state in non_terminal_states:
+        rms_error += (true_state_values[state] - state_values[state]) ** 2
+    rms_error = rms_error / len(non_terminal_states)  # Divide by 19, not 21
+    rms_error = rms_error ** 0.5
+    return rms_error
+
+def run_learning_td_n_step(alpha, n=1, runs=100, episodes=10):
+    rms_errors_over_runs = []
+    for _ in range(runs):
+        state_values = {i: 0 for i in range(1, 20)}  # States are 1-19, not 0-19
+        state_values['left_terminal'] = 0
+        state_values['right_terminal'] = 0
+
+        rms_errors = []
+
+        for _ in range(episodes):
+
+            # implement n-step td here
+            state = INITIAL_STATE
+            T = float('inf')
+            t = 0
+            episode = [(state, 0)]  # Store (S_t, R_t) where R_t is the reward that led INTO S_t
+            while True:
+                if t < T:
+                    action = get_action()
+                    reward = get_reward(state, action)
+                    next_state = get_next_state(state, action)
+                    state = next_state
+                    episode.append((state, reward))  # Store the next state with the reward that led to it
+                    if next_state in terminal_states:
+                        T = t + 1
+                tau = t - n + 1
+                if tau >= 0:
+                    G = 0
+                    for i in range(tau + 1, min(tau + n + 1, T + 1)):
+                            G += episode[i][1]
+                    if tau + n < T:
+                        G += state_values[episode[tau + n][0]]
+                    state_values[episode[tau][0]] += alpha * (G - state_values[episode[tau][0]])
+                t += 1
+                if tau >= T - 1:
+                    break
+            
+            rms_errors.append(calculate_rms_error(state_values, TRUE_STATE_VALUES))
+        average_rms_errors = np.mean(rms_errors)
+        rms_errors_over_runs.append(average_rms_errors)
+
+    average_rms_error = np.mean(rms_errors_over_runs)
+
+    return average_rms_error
+
+
+# Generate data for the graph
+import matplotlib.pyplot as plt
+
+def generate_graph_data():
+    alpha_values = np.arange(0.05, 1.05, 0.05)  # Start from 0.05 to avoid alpha=0
+    n_values = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
     
-    # Mark start and goal states
-    plt.plot(0, 3, 's', markersize=12, color='green', label='Start (3,0)')
-    plt.plot(11, 3, '*', markersize=15, color='red', label='Goal (3,11)')
+    results = {}
     
-    plt.xlim(-0.5, COLS - 0.5)  # 0 to 9 for columns
-    plt.ylim(-0.5, ROWS - 0.5)  # 0 to 6 for rows
+    print("Generating data for graph...")
+    for n in n_values:
+        print(f"Processing n={n}")
+        rms_errors = []
+        for alpha in alpha_values:
+            print(f"  Alpha={alpha:.2f}")
+            rms_error = run_learning_td_n_step(alpha=alpha, n=n, runs=100, episodes=10)
+            rms_errors.append(rms_error)
+        results[n] = rms_errors
     
-    # Add grid and formatting
+    return alpha_values, results
+
+def plot_graph(alpha_values, results):
+    plt.figure(figsize=(12, 8))
+    
+    colors = ['red', 'green', 'blue', 'black', 'purple', 'cyan', 'orange', 'pink', 'brown', 'gray']
+    
+    for i, n in enumerate([1, 2, 4, 8, 16, 32, 64, 128, 256, 512]):
+        plt.plot(alpha_values, results[n], label=f'n={n}', color=colors[i], linewidth=2)
+    
+    plt.xlabel('α', fontsize=14)
+    plt.ylabel('Average\nRMS error\nover 19 states\nand first 10\nepisodes', fontsize=14)
+    plt.title('TD(n) Performance vs Step-size Parameter α', fontsize=16)
     plt.grid(True, alpha=0.3)
-    plt.gca().invert_yaxis()  # Flip y-axis so row 0 is at top
-    
-    # Add axis labels and title
-    plt.xlabel('Columns')
-    plt.ylabel('Rows')
-    
-    # Set integer ticks for better grid visualization
-    plt.xticks(range(COLS))
-    plt.yticks(range(ROWS))
-    
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.xlim(0, 1)
+    plt.ylim(0.25, 0.55)
     plt.tight_layout()
     plt.show()
 
-sarsa_state_action_values, sarsa_step_episodes, sarsa_episode_rewards = train_sarsa(
-    INITIAL_STATE_ACTION_VALUES,
-    alpha=0.5,
-    epsilon=0.1,
-    episodes=500
-)
-plot_episode(sarsa_state_action_values, epsilon=0.00001)
+# Generate and plot the data
+alpha_values, results = generate_graph_data()
+plot_graph(alpha_values, results)
 
-q_state_action_values, q_step_episodes, q_episode_rewards = train_q_learning(
-    INITIAL_STATE_ACTION_VALUES,
-    alpha=0.5,
-    epsilon=0.1,
-    episodes=500
-)
-plot_episode(q_state_action_values, epsilon=0.00001)
-
-plt.plot(sarsa_episode_rewards, color='lightblue', label='SARSA', linewidth=2)
-plt.plot(q_episode_rewards, color='red', label='Q-Learning', linewidth=2)
-
-# limit y axis to -100 to 0
-plt.ylim(-100, 0)
-plt.xlabel('Episode')
-plt.ylabel('Sum of Rewards per Episode')
-plt.title('SARSA vs Q-Learning Performance: Cliff Walking')
-plt.legend()
-plt.grid(True, alpha=0.3)
-plt.show()
+rms_error = run_learning_td_n_step(alpha=.4, n=4)
+print(f"Test RMS error (alpha=0.4, n=4): {rms_error}")
