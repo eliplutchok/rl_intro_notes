@@ -1,169 +1,130 @@
 import random
-
-state_list = ['left_terminal'] + list(range(1, 20)) + ['right_terminal']
-terminal_states = ['left_terminal', 'right_terminal']
-
-TRUE_STATE_VALUES = {
-    'left_terminal': 0,
-    'right_terminal': 0,
-    1: -9/10,
-    2: -8/10,
-    3: -7/10,
-    4: -6/10,
-    5: -5/10,
-    6: -4/10,
-    7: -3/10,
-    8: -2/10,
-    9: -1/10,
-    10: 0,
-    11: 1/10,
-    12: 2/10,
-    13: 3/10,
-    14: 4/10,
-    15: 5/10,
-    16: 6/10,
-    17: 7/10,
-    18: 8/10,
-    19: 9/10,
-    'right_terminal': 0,
-}
-
-INITIAL_STATE = 10
-
-def get_next_state(state, action):
-    if action == 'left':
-        return state_list[state - 1]
-    else:
-        return state_list[state + 1]
-
-def get_action():
-    if random.random() < 0.5:
-        return 'right'
-    else:
-        return 'left'
-    
-def get_reward(state, action):
-    if state == 19 and action == 'right':
-        return 1
-    elif state == 1 and action == 'left':
-        return -1
-    else:
-        return 0
-
-def generate_episode():
-    episode = []
-    state = INITIAL_STATE
-    while state not in terminal_states:
-        action = get_action()
-        next_state = get_next_state(state, action)
-        reward = get_reward(state, action)
-        episode.append((state, reward))
-        state = next_state
-    return episode
-
-episode = generate_episode()
-print(len(episode))
-
+import copy
 import numpy as np
-
-def calculate_rms_error(state_values, true_state_values):
-    rms_error = 0
-    # Only calculate RMS over non-terminal states (1-19)
-    non_terminal_states = [i for i in range(1, 20)]
-    for state in non_terminal_states:
-        rms_error += (true_state_values[state] - state_values[state]) ** 2
-    rms_error = rms_error / len(non_terminal_states)  # Divide by 19, not 21
-    rms_error = rms_error ** 0.5
-    return rms_error
-
-def run_learning_td_n_step(alpha, n=1, runs=100, episodes=10):
-    rms_errors_over_runs = []
-    for _ in range(runs):
-        state_values = {i: 0 for i in range(1, 20)}  # States are 1-19, not 0-19
-        state_values['left_terminal'] = 0
-        state_values['right_terminal'] = 0
-
-        rms_errors = []
-
-        for _ in range(episodes):
-
-            # implement n-step td here
-            state = INITIAL_STATE
-            T = float('inf')
-            t = 0
-            episode = [(state, 0)]  # Store (S_t, R_t) where R_t is the reward that led INTO S_t
-            while True:
-                if t < T:
-                    action = get_action()
-                    reward = get_reward(state, action)
-                    next_state = get_next_state(state, action)
-                    state = next_state
-                    episode.append((state, reward))  # Store the next state with the reward that led to it
-                    if next_state in terminal_states:
-                        T = t + 1
-                tau = t - n + 1
-                if tau >= 0:
-                    G = 0
-                    for i in range(tau + 1, min(tau + n + 1, T + 1)):
-                            G += episode[i][1]
-                    if tau + n < T:
-                        G += state_values[episode[tau + n][0]]
-                    state_values[episode[tau][0]] += alpha * (G - state_values[episode[tau][0]])
-                t += 1
-                if tau >= T - 1:
-                    break
-            
-            rms_errors.append(calculate_rms_error(state_values, TRUE_STATE_VALUES))
-        average_rms_errors = np.mean(rms_errors)
-        rms_errors_over_runs.append(average_rms_errors)
-
-    average_rms_error = np.mean(rms_errors_over_runs)
-
-    return average_rms_error
-
-
-# Generate data for the graph
 import matplotlib.pyplot as plt
 
-def generate_graph_data():
-    alpha_values = np.arange(0.05, 1.05, 0.05)  # Start from 0.05 to avoid alpha=0
-    n_values = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-    
-    results = {}
-    
-    print("Generating data for graph...")
-    for n in n_values:
-        print(f"Processing n={n}")
-        rms_errors = []
-        for alpha in alpha_values:
-            print(f"  Alpha={alpha:.2f}")
-            rms_error = run_learning_td_n_step(alpha=alpha, n=n, runs=100, episodes=10)
-            rms_errors.append(rms_error)
-        results[n] = rms_errors
-    
-    return alpha_values, results
+maze = [
+    ['0', '0', '0', '0', '0', '0', '0', '1', 'g'],
+    ['0', '0', '1', '0', '0', '0', '0', '1', '0'],
+    ['s', '0', '1', '0', '0', '0', '0', '1', '0'],
+    ['0', '0', '1', '0', '0', '0', '0', '0', '0'],
+    ['0', '0', '0', '0', '0', '1', '0', '0', '0'],
+    ['0', '0', '0', '0', '0', '0', '0', '0', '0']
+]
 
-def plot_graph(alpha_values, results):
-    plt.figure(figsize=(12, 8))
-    
-    colors = ['red', 'green', 'blue', 'black', 'purple', 'cyan', 'orange', 'pink', 'brown', 'gray']
-    
-    for i, n in enumerate([1, 2, 4, 8, 16, 32, 64, 128, 256, 512]):
-        plt.plot(alpha_values, results[n], label=f'n={n}', color=colors[i], linewidth=2)
-    
-    plt.xlabel('α', fontsize=14)
-    plt.ylabel('Average\nRMS error\nover 19 states\nand first 10\nepisodes', fontsize=14)
-    plt.title('TD(n) Performance vs Step-size Parameter α', fontsize=16)
-    plt.grid(True, alpha=0.3)
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.xlim(0, 1)
-    plt.ylim(0.25, 0.55)
-    plt.tight_layout()
-    plt.show()
+GAMMA = .95
+ALPHA = .1
+EPSILON = .1
+SEED = 41
+random.seed(SEED)
 
-# Generate and plot the data
-alpha_values, results = generate_graph_data()
-plot_graph(alpha_values, results)
+INITIAL_ACTION_VALUES = {
+    (i, j): {
+        'up': 0,
+        'down': 0,
+        'left': 0,
+        'right': 0
+    } for i in range(6) for j in range(9)
+}
 
-rms_error = run_learning_td_n_step(alpha=.4, n=4)
-print(f"Test RMS error (alpha=0.4, n=4): {rms_error}")
+def next_state_and_reward(state, action):
+    proposed_state = state
+    if action == 'up':
+        proposed_state = (state[0] - 1, state[1])
+    elif action == 'down':
+        proposed_state = (state[0] + 1, state[1])
+    elif action == 'left':
+        proposed_state = (state[0], state[1] - 1)
+    elif action == 'right':
+        proposed_state = (state[0], state[1] + 1)
+
+    if proposed_state[0] < 0 or proposed_state[0] > 5 or proposed_state[1] < 0 or proposed_state[1] > 8:
+        proposed_state = state
+
+    if maze[proposed_state[0]][proposed_state[1]] == '1':
+        proposed_state = state
+   
+    reward = 1 if maze[proposed_state[0]][proposed_state[1]] == 'g' else 0
+
+    return proposed_state, reward
+
+def get_action(state, q):
+    if random.random() < EPSILON:
+        return random.choice(['up', 'down', 'left', 'right'])
+    else:
+        max_q = max(q[state].values())
+        actions = [action for action, value in q[state].items() if value == max_q]
+        return random.choice(actions)
+
+def get_greedy_action(state, q):
+    max_q = max(q[state].values())
+    actions = [action for action, value in q[state].items() if value == max_q]
+    return random.choice(actions)
+
+def generate_episode(q):
+    s = (2, 0)
+    episode = [s]
+    reward = 0
+    while maze[s[0]][s[1]] != 'g':
+        a = get_greedy_action(s, q)
+        s_prime, reward = next_state_and_reward(s, a)
+        episode.append(s_prime)
+        s = s_prime
+    return episode
+
+def update_model(model, s, a, s_prime, reward):
+    if s not in model:
+        model[s] = {}
+    model[s][a] = (s_prime, reward)
+
+def dyna_train(num_episodes, n, q):
+    model = {}
+    episode_steps = []
+    completed_episodes = 0
+    step = 1
+    s = (2, 0)
+    while completed_episodes < num_episodes:
+        a = get_action(s, q)
+        s_prime, reward = next_state_and_reward(s, a)
+        q[s][a] += ALPHA * (reward + GAMMA * max(q[s_prime].values()) - q[s][a])
+        update_model(model, s, a, s_prime, reward)
+
+        for _ in range(n):
+            dyna_s = random.choice(list(model.keys()))
+            dyna_a = random.choice(list(model[dyna_s].keys()))
+            dyna_s_prime, dyna_reward = model[dyna_s][dyna_a]
+            q[dyna_s][dyna_a] += ALPHA * (dyna_reward + GAMMA * max(q[dyna_s_prime].values()) - q[dyna_s][dyna_a])
+
+        s = s_prime
+        if maze[s[0]][s[1]] == 'g':
+            completed_episodes += 1
+            episode_steps.append(step)
+            step = 1
+            s = (2, 0)
+        else:
+            step += 1
+
+    return q, episode_steps
+
+def get_avg_30_runs(num_episodes, n):
+    planning_runs = []
+    for _ in range(30):
+        _, episode_steps = dyna_train(num_episodes, n, q=copy.deepcopy(INITIAL_ACTION_VALUES))
+        planning_runs.append(episode_steps)
+
+    return np.mean(planning_runs, axis=0).tolist()
+
+avg_planning_0 = get_avg_30_runs(50, 0)
+avg_planning_5 = get_avg_30_runs(50, 5)
+avg_planning_50 = get_avg_30_runs(50, 50)
+
+x = list(range(1, 51))
+plt.plot(x[1:], avg_planning_0[1:], color='blue', label='n=0', linewidth=1)
+plt.plot(x[1:], avg_planning_5[1:], color='green', label='n=5', linewidth=1)
+plt.plot(x[1:], avg_planning_50[1:], color='red', label='n=50', linewidth=1)
+
+plt.xlim(0, 50)
+plt.xlabel('Episode')
+plt.ylabel('Steps per Episode')
+plt.legend()
+plt.show()
