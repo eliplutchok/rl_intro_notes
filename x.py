@@ -1,130 +1,85 @@
-import random
-import copy
 import numpy as np
 import matplotlib.pyplot as plt
 
-maze = [
-    ['0', '0', '0', '0', '0', '0', '0', '1', 'g'],
-    ['0', '0', '1', '0', '0', '0', '0', '1', '0'],
-    ['s', '0', '1', '0', '0', '0', '0', '1', '0'],
-    ['0', '0', '1', '0', '0', '0', '0', '0', '0'],
-    ['0', '0', '0', '0', '0', '1', '0', '0', '0'],
-    ['0', '0', '0', '0', '0', '0', '0', '0', '0']
-]
+num_states = 1000
+max_step = 100
+p_each = 1.0 / (2 * max_step)
 
-GAMMA = .95
-ALPHA = .1
-EPSILON = .1
-SEED = 41
-random.seed(SEED)
+A = np.zeros((num_states, num_states), dtype=np.float64)
+b = np.zeros(num_states, dtype=np.float64)
 
-INITIAL_ACTION_VALUES = {
-    (i, j): {
-        'up': 0,
-        'down': 0,
-        'left': 0,
-        'right': 0
-    } for i in range(6) for j in range(9)
-}
+for s in range(1, num_states + 1):
+    row = s - 1
+    for k in range(1, max_step + 1):
+        left = s - k
+        if left >= 1:
+            A[row, left - 1] += p_each
+        else:
+            b[row] += -1.0 * p_each
+        right = s + k
+        if right <= num_states:
+            A[row, right - 1] += p_each
+        else:
+            b[row] += +1.0 * p_each
 
-def next_state_and_reward(state, action):
-    proposed_state = state
-    if action == 'up':
-        proposed_state = (state[0] - 1, state[1])
-    elif action == 'down':
-        proposed_state = (state[0] + 1, state[1])
-    elif action == 'left':
-        proposed_state = (state[0], state[1] - 1)
-    elif action == 'right':
-        proposed_state = (state[0], state[1] + 1)
+TRUE_VALUES = np.linalg.solve(np.eye(num_states, dtype=np.float64) - A, b)
 
-    if proposed_state[0] < 0 or proposed_state[0] > 5 or proposed_state[1] < 0 or proposed_state[1] > 8:
-        proposed_state = state
 
-    if maze[proposed_state[0]][proposed_state[1]] == '1':
-        proposed_state = state
-   
-    reward = 1 if maze[proposed_state[0]][proposed_state[1]] == 'g' else 0
-
-    return proposed_state, reward
-
-def get_action(state, q):
-    if random.random() < EPSILON:
-        return random.choice(['up', 'down', 'left', 'right'])
+def get_next_state_and_reward(state, action):
+    proposed_next_state = state + action
+    if proposed_next_state < 1:
+        return 'terminal', -1
+    elif proposed_next_state > num_states:
+        return 'terminal', 1
     else:
-        max_q = max(q[state].values())
-        actions = [action for action, value in q[state].items() if value == max_q]
-        return random.choice(actions)
+        return proposed_next_state, 0
 
-def get_greedy_action(state, q):
-    max_q = max(q[state].values())
-    actions = [action for action, value in q[state].items() if value == max_q]
-    return random.choice(actions)
+def get_next_action():
+    # Generate action from -100 to +100, excluding 0
+    action = np.random.randint(-100, 101)
+    if action == 0:
+        action = np.random.choice([-1, 1])
+    return action
 
-def generate_episode(q):
-    s = (2, 0)
-    episode = [s]
-    reward = 0
-    while maze[s[0]][s[1]] != 'g':
-        a = get_greedy_action(s, q)
-        s_prime, reward = next_state_and_reward(s, a)
-        episode.append(s_prime)
-        s = s_prime
+def generate_episode():
+    state = 500
+    episode = []
+    while state != 'terminal':
+        action = get_next_action()
+        next_state, reward = get_next_state_and_reward(state, action)
+        episode.append((state, action, reward))
+        state = next_state
     return episode
 
-def update_model(model, s, a, s_prime, reward):
-    if s not in model:
-        model[s] = {}
-    model[s][a] = (s_prime, reward)
+def get_vector_from_state(state):
+    # one hot encoding
+    vector = np.zeros(10)
+    position = (state - 1) // 100
+    vector[position] = 1
+    return vector
 
-def dyna_train(num_episodes, n, q):
-    model = {}
-    episode_steps = []
-    completed_episodes = 0
-    step = 1
-    s = (2, 0)
-    while completed_episodes < num_episodes:
-        a = get_action(s, q)
-        s_prime, reward = next_state_and_reward(s, a)
-        q[s][a] += ALPHA * (reward + GAMMA * max(q[s_prime].values()) - q[s][a])
-        update_model(model, s, a, s_prime, reward)
+def value_function(W, state):
+    return np.dot(W, get_vector_from_state(state))
 
-        for _ in range(n):
-            dyna_s = random.choice(list(model.keys()))
-            dyna_a = random.choice(list(model[dyna_s].keys()))
-            dyna_s_prime, dyna_reward = model[dyna_s][dyna_a]
-            q[dyna_s][dyna_a] += ALPHA * (dyna_reward + GAMMA * max(q[dyna_s_prime].values()) - q[dyna_s][dyna_a])
+def gradient_monte_carlo(W, state):
+    return get_vector_from_state(state)
 
-        s = s_prime
-        if maze[s[0]][s[1]] == 'g':
-            completed_episodes += 1
-            episode_steps.append(step)
-            step = 1
-            s = (2, 0)
-        else:
-            step += 1
+def train_gradient_monte_carlo(num_episodes, alpha):
+    W = np.zeros(10)
+    for _ in range(num_episodes):
+        episode = generate_episode()
+        episode_return = episode[-1][2]
+        for state, _, _ in episode:
+            W += alpha * (episode_return - value_function(W, state)) * gradient_monte_carlo(W, state)
+    return W
 
-    return q, episode_steps
+W = train_gradient_monte_carlo(100000, 2e-5)
 
-def get_avg_30_runs(num_episodes, n):
-    planning_runs = []
-    for _ in range(30):
-        _, episode_steps = dyna_train(num_episodes, n, q=copy.deepcopy(INITIAL_ACTION_VALUES))
-        planning_runs.append(episode_steps)
+# generate values for the 1000 states
+values = np.zeros(num_states)
+for state in range(1, num_states + 1):
+    values[state - 1] = value_function(W, state)
 
-    return np.mean(planning_runs, axis=0).tolist()
-
-avg_planning_0 = get_avg_30_runs(50, 0)
-avg_planning_5 = get_avg_30_runs(50, 5)
-avg_planning_50 = get_avg_30_runs(50, 50)
-
-x = list(range(1, 51))
-plt.plot(x[1:], avg_planning_0[1:], color='blue', label='n=0', linewidth=1)
-plt.plot(x[1:], avg_planning_5[1:], color='green', label='n=5', linewidth=1)
-plt.plot(x[1:], avg_planning_50[1:], color='red', label='n=50', linewidth=1)
-
-plt.xlim(0, 50)
-plt.xlabel('Episode')
-plt.ylabel('Steps per Episode')
-plt.legend()
+plt.plot(values)
+plt.plot(TRUE_VALUES)
 plt.show()
